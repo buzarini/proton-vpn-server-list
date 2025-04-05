@@ -1,7 +1,7 @@
 $(document).ready(async function() {
     // Constants
     const MSG_UNKNOWN_IPV6 = ":: (Yes, but unknown)";
-    const UPDATE_DATE = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+    const UPDATE_DATE = new Date().toISOString().split('T')[0];
     
     // Set update date
     $('#updateDate').text(UPDATE_DATE);
@@ -122,7 +122,7 @@ $(document).ready(async function() {
             const ipv6Data = await fetch("nodes-ipv6.json").then(res => res.json());
             const ipInfoText = await fetch("ipinfo.csv").then(res => res.text());
             
-            // Parse CSV data manually since $.csv.toObjects() is not working
+            // Parse CSV data
             const ipInfoData = parseCSV(ipInfoText);
             
             if (!logicalsData.LogicalServers) throw new Error("Invalid server data");
@@ -132,7 +132,6 @@ $(document).ready(async function() {
             const locationGroups = {};
             
             logicalsData.LogicalServers.forEach(logical => {
-                // Prepare data for table view
                 if (logical.Servers.length === 1) {
                     const server = logical.Servers[0];
                     const isp = ipInfoData.find(i => i.ip === server.ExitIP);
@@ -143,14 +142,13 @@ $(document).ready(async function() {
                         logical.Name,
                         server.EntryIP,
                         server.ExitIP,
-                        ipv6Data[logical.Domain] || (!!(16 & logical.Features) ? MSG_UNKNOWN_IPV6 : "",
-                        "", // Exit IPv6 (will be filled later)
+                        ipv6Data[logical.Domain] || (!!(16 & logical.Features) ? MSG_UNKNOWN_IPV6 : ""),
+                        "",
                         isp ? isp.org : "",
                         location
                     ]);
                 }
                 
-                // Prepare data for map view
                 if (logical.Location && logical.Location.Lat && logical.Location.Long) {
                     const key = `${logical.Location.Lat.toFixed(2)},${logical.Location.Long.toFixed(2)}`;
                     if (!locationGroups[key]) {
@@ -162,34 +160,34 @@ $(document).ready(async function() {
             
             // Guess Exit IPv6 Addresses for table view
             const hasIpv6 = tableData.filter(l => l[4] && l[4] !== "" && l[4] !== MSG_UNKNOWN_IPV6);
+            
             hasIpv6.sort((a, b) => {
-                const aNum = Number(a[1].split("#")[1]);
-                const bNum = Number(b[1].split("#")[1]);
+                const aNum = parseInt(a[1].split("#")[1] || "0");
+                const bNum = parseInt(b[1].split("#")[1] || "0");
                 return aNum - bNum;
             });
             
-            // Group by node
-            const groupedByNode = {};
+            const nodeGroups = {};
             hasIpv6.forEach(server => {
                 const node = server[0];
-                if (!groupedByNode[node]) {
-                    groupedByNode[node] = [];
+                if (!nodeGroups[node]) {
+                    nodeGroups[node] = [];
                 }
-                groupedByNode[node].push(server);
+                nodeGroups[node].push(server);
             });
             
-            // Process each node group
-            Object.values(groupedByNode).forEach(nodeGroup => {
+            Object.values(nodeGroups).forEach(nodeGroup => {
                 if (nodeGroup.length === 0) return;
                 
                 const firstServer = nodeGroup[0];
                 const ipv6Parts = firstServer[4].split("::");
-                const prefix = ipv6Parts[0];
-                let suffixInt = parseInt(ipv6Parts[1], 16);
+                if (ipv6Parts.length !== 2) return;
                 
-                // Special cases handling
-                if (suffixInt === 17) suffixInt = 16; // Fix for co-01
-                if (suffixInt === 13) suffixInt = 32; // Fix for some servers on node-ch-15
+                const prefix = ipv6Parts[0];
+                let suffixInt = parseInt(ipv6Parts[1], 16) || 0;
+
+                if (suffixInt === 17) suffixInt = 16;
+                if (suffixInt === 13) suffixInt = 32;
                 
                 nodeGroup.forEach(server => {
                     suffixInt++;
@@ -213,7 +211,7 @@ $(document).ready(async function() {
                 ],
                 initComplete: function() {
                     loadingElement.hide();
-                    showTable(); // Default view
+                    showTable();
                 }
             });
             
@@ -231,10 +229,9 @@ $(document).ready(async function() {
             
             Object.entries(locationGroups).forEach(([key, servers]) => {
                 const [lat, lon] = key.split(',').map(Number);
-                const locationName = servers[0].City ? servers[0].City : servers[0].EntryCountry;
+                const locationName = servers[0].City || servers[0].EntryCountry;
                 
-                let popupContent = `<b>${locationName}</b><br>`;
-                popupContent += `<b>${servers.length} Servers</b><br><div class="popup-content">`;
+                let popupContent = `<b>${locationName}</b><br><b>${servers.length} Servers</b><br><div class="popup-content">`;
                 
                 servers.forEach(server => {
                     let smartRouting = server.HostCountry && server.HostCountry !== server.EntryCountry 
