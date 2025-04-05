@@ -206,6 +206,19 @@
             background: rgba(0, 0, 0, 0.2);
         }
         
+        .storage-warning {
+            position: fixed;
+            bottom: 80px;
+            left: 20px;
+            background: rgba(255, 193, 7, 0.9);
+            color: black;
+            padding: 8px 12px;
+            border-radius: 8px;
+            z-index: 1100;
+            font-size: 12px;
+            max-width: 300px;
+        }
+        
         @media (max-width: 768px) {
             #map {
                 height: 50vh;
@@ -219,6 +232,11 @@
             
             .export-buttons {
                 flex-direction: column;
+            }
+            
+            .storage-warning {
+                bottom: 60px;
+                max-width: 200px;
             }
         }
     </style>
@@ -302,6 +320,11 @@
     
     <div class="last-update">Последнее обновление: <span id="update-date">2025-02-26</span></div>
 
+    <!-- Уведомление о переполнении хранилища -->
+    <div class="storage-warning" id="storage-warning" style="display: none;">
+        Внимание: Не удалось сохранить все данные в локальное хранилище. Некоторые функции могут работать ограниченно.
+    </div>
+
     <!-- Скрипты -->
     <script src="https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
@@ -311,6 +334,7 @@
     <script src="https://unpkg.com/leaflet.markercluster/dist/leaflet.markercluster.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/jquery-csv@1.0.40/src/jquery.csv.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <script src="https://cdn.jsdelivr.net/npm/lz-string@1.4.4/libs/lz-string.min.js"></script>
 
     <script>
         // Глобальные переменные
@@ -318,6 +342,7 @@
         const MSG_UNKNOWN_IPV6 = ":: (Есть, но неизвестен)";
         let L = null; // Для ленивой загрузки Leaflet
         let Chart = null; // Для ленивой загрузки Chart.js
+        let storageWarningShown = false;
         
         // Локализация DataTables на русский
         const russianLanguage = {
@@ -402,6 +427,11 @@
                 try {
                     $('#loading').show();
                     
+                    // Убедимся, что данные загружены
+                    if (!allServersData || allServersData.length === 0) {
+                        await loadServerDataWithCache();
+                    }
+                    
                     // Динамически загружаем Leaflet только когда нужен
                     if (!L) {
                         const leafletModule = await import('https://unpkg.com/leaflet@1.9.4/dist/leaflet-src.esm.js');
@@ -419,29 +449,38 @@
             }
         }
 
-        // 2. Кэширование данных
+        // 2. Улучшенное кэширование данных
         async function loadServerDataWithCache() {
             const CACHE_KEY = "protonvpn-servers-cache";
             const CACHE_DURATION = 3600 * 1000; // 1 час
             
             try {
-                const cached = localStorage.getItem(CACHE_KEY);
-                if (cached) {
-                    const { data, timestamp } = JSON.parse(cached);
-                    if (Date.now() - timestamp < CACHE_DURATION) {
-                        allServersData = data;
-                        initServerTable();
-                        checkServerChanges(data);
-                        return;
+                // Пробуем получить данные из кэша
+                const cached = await getFromStorage(CACHE_KEY);
+                if (cached && cached.data && Date.now() - cached.timestamp < CACHE_DURATION) {
+                    allServersData = cached.data;
+                    initServerTable();
+                    checkServerChanges(cached.data);
+                    return;
+                }
+                
+                // Загружаем новые данные
+                const data = await fetchServerData();
+                allServersData = data;
+                
+                try {
+                    await saveToStorage(CACHE_KEY, { 
+                        data: data,
+                        timestamp: Date.now()
+                    }, true); // Пробуем сжать данные
+                } catch (storageError) {
+                    console.warn("Не удалось сохранить в кэш:", storageError);
+                    if (!storageWarningShown) {
+                        $('#storage-warning').fadeIn().delay(5000).fadeOut();
+                        storageWarningShown = true;
                     }
                 }
                 
-                const data = await fetchServerData();
-                localStorage.setItem(CACHE_KEY, JSON.stringify({
-                    data: data,
-                    timestamp: Date.now()
-                }));
-                allServersData = data;
                 initServerTable();
                 checkServerChanges(data);
                 
@@ -453,75 +492,151 @@
             }
         }
 
+        // Функция для безопасного сохранения в хранилище
+        async function saveToStorage(key, value, tryCompress = false) {
+            try {
+                let dataToSave = value;
+                
+                // Пробуем сжать данные, если запрошено
+                if (tryCompress) {
+                    try {
+                        const compressed = {
+                            ...value,
+                            data: LZString.compressToUTF16(JSON.stringify(value.data))
+                        };
+                        localStorage.setItem(key, JSON.stringify(compressed));
+                        return;
+                    } catch (e) {
+                        console.log("Сжатие не удалось, сохраняем без сжатия");
+                    }
+                }
+                
+                // Пробуем сохранить полные данные
+                try {
+                    localStorage.setItem(key, JSON.stringify(value));
+                    return;
+                } catch (e) {
+                    if (e.name === 'QuotaExceededError') {
+                        // Если переполнение - сохраняем только минимально необходимые данные
+                        const minimalData = {
+                            timestamp: value.timestamp,
+                            data: value.data.map(server => ({
+                                domain: server.domain,
+                                name: server.name,
+                                country: server.country,
+                                type: server.type
+                            }))
+                        };
+                        localStorage.setItem(key, JSON.stringify(minimalData));
+                    } else {
+                        throw e;
+                    }
+                }
+            } catch (e) {
+                console.error("Ошибка сохранения в хранилище:", e);
+                throw e;
+            }
+        }
+
+        // Функция для получения данных из хранилища
+        async function getFromStorage(key) {
+            try {
+                const stored = localStorage.getItem(key);
+                if (!stored) return null;
+                
+                const parsed = JSON.parse(stored);
+                
+                // Проверяем, сжаты ли данные
+                if (parsed.data && typeof parsed.data === 'string') {
+                    return {
+                        ...parsed,
+                        data: JSON.parse(LZString.decompressFromUTF16(parsed.data))
+                    };
+                }
+                
+                return parsed;
+            } catch (e) {
+                console.error("Ошибка чтения из хранилища:", e);
+                return null;
+            }
+        }
+
         async function fetchServerData() {
-            const [logicalsRes, nodesIpv6Res, ipinfoRes] = await Promise.all([
-                fetchWithRetry("logicals.json?2025-01-21"),
-                fetchWithRetry("nodes-ipv6.json?2025-01-21"),
-                fetchWithRetry("ipinfo.csv?2025-01-21")
-            ]);
-            
-            const [logicalsJson, nodesIpv6, ipinfoText] = await Promise.all([
-                logicalsRes.json(),
-                nodesIpv6Res.json(),
-                ipinfoRes.text()
-            ]);
-            
-            const logicals = logicalsJson.LogicalServers;
-            const ipinfo = $.csv.toObjects(ipinfoText);
-            const serversData = [];
-
-            logicals.filter(l => l.Servers.length === 1).forEach(logical => {
-                const isp = ipinfo.find(i => i.ip === logical.Servers[0].ExitIP);
-                const hasIpv6 = !!(16 & logical.Features);
-                const isTor = logical.Name.includes("TOR");
-                const isSecureCore = logical.Features === 1;
-                const isSmartRouting = logical.HostCountry && logical.HostCountry !== logical.EntryCountry;
+            try {
+                const [logicalsRes, nodesIpv6Res, ipinfoRes] = await Promise.all([
+                    fetchWithRetry("logicals.json?2025-01-21"),
+                    fetchWithRetry("nodes-ipv6.json?2025-01-21"),
+                    fetchWithRetry("ipinfo.csv?2025-01-21")
+                ]);
                 
-                const serverData = {
-                    domain: logical.Domain,
-                    name: logical.Name,
-                    entryIpv4: logical.Servers[0].EntryIP,
-                    exitIpv4: logical.Servers[0].ExitIP,
-                    entryIpv6: nodesIpv6[logical.Domain] || (hasIpv6 ? MSG_UNKNOWN_IPV6 : ""),
-                    exitIpv6: "",
-                    provider: isp ? isp.org : "",
-                    load: logical.Load || 0,
-                    type: isTor ? "tor" : isSecureCore ? "secure-core" : isSmartRouting ? "smart-routing" : "regular",
-                    lat: logical.Location?.Lat,
-                    lon: logical.Location?.Long,
-                    city: logical.City,
-                    country: logical.EntryCountry,
-                    hostCountry: logical.HostCountry
-                };
+                const [logicalsJson, nodesIpv6, ipinfoText] = await Promise.all([
+                    logicalsRes.json(),
+                    nodesIpv6Res.json(),
+                    ipinfoRes.text()
+                ]);
                 
-                serversData.push(serverData);
-            });
+                const logicals = logicalsJson.LogicalServers;
+                const ipinfo = $.csv.toObjects(ipinfoText);
+                const serversData = [];
 
-            // Предполагаем выходные IPv6 адреса
-            const hasIpv6 = serversData.filter(l => l.entryIpv6 && l.entryIpv6 !== MSG_UNKNOWN_IPV6);
-            hasIpv6.sort((a, b) => Number(a.name.split("#")[1]) - Number(b.name.split("#")[1]));
-
-            Object.entries(Object.groupBy(hasIpv6, d => d.domain)).forEach(([_, node]) => {
-                const parts = node[0].entryIpv6.split("::");
-                const prefix = parts[0];
-                let suffixInt = parseInt(parts[1], 16);
-
-                // Исправления для специфических случаев
-                if (suffixInt === 17) suffixInt = 16;
-                if (suffixInt === 13) suffixInt = 32;
-                
-                node.forEach(server => {
-                    suffixInt++;
-                    server.exitIpv6 = `${prefix}::${suffixInt.toString(16)}`;
+                logicals.filter(l => l.Servers.length === 1).forEach(logical => {
+                    const isp = ipinfo.find(i => i.ip === logical.Servers[0].ExitIP);
+                    const hasIpv6 = !!(16 & logical.Features);
+                    const isTor = logical.Name.includes("TOR");
+                    const isSecureCore = logical.Features === 1;
+                    const isSmartRouting = logical.HostCountry && logical.HostCountry !== logical.EntryCountry;
+                    
+                    const serverData = {
+                        domain: logical.Domain,
+                        name: logical.Name,
+                        entryIpv4: logical.Servers[0].EntryIP,
+                        exitIpv4: logical.Servers[0].ExitIP,
+                        entryIpv6: nodesIpv6[logical.Domain] || (hasIpv6 ? MSG_UNKNOWN_IPV6 : ""),
+                        exitIpv6: "",
+                        provider: isp ? isp.org : "",
+                        load: logical.Load || 0,
+                        type: isTor ? "tor" : isSecureCore ? "secure-core" : isSmartRouting ? "smart-routing" : "regular",
+                        lat: logical.Location?.Lat,
+                        lon: logical.Location?.Long,
+                        city: logical.City,
+                        country: logical.EntryCountry,
+                        hostCountry: logical.HostCountry
+                    };
+                    
+                    serversData.push(serverData);
                 });
-            });
 
-            return serversData;
+                // Предполагаем выходные IPv6 адреса
+                const hasIpv6 = serversData.filter(l => l.entryIpv6 && l.entryIpv6 !== MSG_UNKNOWN_IPV6);
+                hasIpv6.sort((a, b) => Number(a.name.split("#")[1]) - Number(b.name.split("#")[1]));
+
+                Object.entries(Object.groupBy(hasIpv6, d => d.domain)).forEach(([_, node]) => {
+                    const parts = node[0].entryIpv6.split("::");
+                    const prefix = parts[0];
+                    let suffixInt = parseInt(parts[1], 16);
+
+                    // Исправления для специфических случаев
+                    if (suffixInt === 17) suffixInt = 16;
+                    if (suffixInt === 13) suffixInt = 32;
+                    
+                    node.forEach(server => {
+                        suffixInt++;
+                        server.exitIpv6 = `${prefix}::${suffixInt.toString(16)}`;
+                    });
+                });
+
+                return serversData;
+            } catch (error) {
+                console.error("Ошибка загрузки данных серверов:", error);
+                throw error;
+            }
         }
 
         // 3. Оптимизированная фильтрация маркеров
         function optimizedFilterMarkers(filter) {
             requestAnimationFrame(() => {
+                if (!markerCluster) return;
+                
                 markerCluster.clearLayers();
                 const filtered = filter === 'all' 
                     ? allServersData 
@@ -536,6 +651,18 @@
         }
 
         function initMap() {
+            // Проверяем данные и библиотеку
+            if (!allServersData || !Array.isArray(allServersData)) {
+                console.error('Данные серверов не загружены');
+                showError("Данные серверов не загружены. Пожалуйста, обновите страницу.");
+                return;
+            }
+            
+            if (!L) {
+                console.error('Библиотека Leaflet не загружена');
+                return;
+            }
+            
             // Проверяем, не инициализирована ли карта уже
             if (map) {
                 map.remove();
@@ -569,7 +696,7 @@
             });            
             
             // Создаем маркеры для всех серверов
-            createMarkers(allServersData);
+            createMarkers(allServersData.filter(server => server.lat && server.lon));
             
             // Добавляем кластер на карту
             map.addLayer(markerCluster);
@@ -579,6 +706,8 @@
         }
         
         function createMarkers(servers) {
+            if (!L || !markerCluster) return;
+            
             // Очищаем предыдущие маркеры
             serverMarkers = [];
             
@@ -628,6 +757,11 @@
         }
 
         function initServerTable() {
+            if (!allServersData || allServersData.length === 0) {
+                console.error("Нет данных для инициализации таблицы");
+                return;
+            }
+            
             serverTable = $('#server-table').DataTable({
                 data: allServersData.map(server => [
                     server.domain,
@@ -671,6 +805,8 @@
         }
         
         function filterTable(filter) {
+            if (!serverTable) return;
+            
             if (filter === 'all') {
                 serverTable.search('').columns().search('').draw();
             } else if (filter === 'ipv6') {
@@ -689,24 +825,39 @@
         // 1. Экспорт данных
         function setupExportButtons() {
             $('#export-csv').click(() => {
-                const csv = $.csv.fromObjects(allServersData);
-                downloadFile(csv, 'protonvpn-servers.csv', 'text/csv');
+                try {
+                    const csv = $.csv.fromObjects(allServersData);
+                    downloadFile(csv, 'protonvpn-servers.csv', 'text/csv');
+                } catch (e) {
+                    console.error("Ошибка экспорта в CSV:", e);
+                    showError("Не удалось создать CSV файл");
+                }
             });
             
             $('#export-json').click(() => {
-                const json = JSON.stringify(allServersData, null, 2);
-                downloadFile(json, 'protonvpn-servers.json', 'application/json');
+                try {
+                    const json = JSON.stringify(allServersData, null, 2);
+                    downloadFile(json, 'protonvpn-servers.json', 'application/json');
+                } catch (e) {
+                    console.error("Ошибка экспорта в JSON:", e);
+                    showError("Не удалось создать JSON файл");
+                }
             });
         }
 
         function downloadFile(content, filename, type) {
-            const blob = new Blob([content], { type });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = filename;
-            a.click();
-            URL.revokeObjectURL(url);
+            try {
+                const blob = new Blob([content], { type });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = filename;
+                a.click();
+                setTimeout(() => URL.revokeObjectURL(url), 100);
+            } catch (e) {
+                console.error("Ошибка загрузки файла:", e);
+                showError("Не удалось скачать файл");
+            }
         }
 
         // 2. Поиск ближайшего сервера
@@ -714,6 +865,11 @@
             $('#find-nearest').click(() => {
                 if (!navigator.geolocation) {
                     showError("Геолокация не поддерживается вашим браузером");
+                    return;
+                }
+                
+                if (!map || !L) {
+                    showError("Карта не загружена");
                     return;
                 }
                 
@@ -725,150 +881,17 @@
                         $('#loading').hide();
                     },
                     error => {
+                        console.error("Ошибка геолокации:", error);
                         showError("Не удалось определить местоположение: " + error.message);
                         $('#loading').hide();
                     },
-                    { timeout: 10000 }
+                    { 
+                        timeout: 10000,
+                        maximumAge: 60000,
+                        enableHighAccuracy: true 
+                    }
                 );
             });
         }
 
-        function findAndHighlightNearestServer(lat, lng) {
-            if (!allServersData.length || !map || !L) return;
-            
-            let closest = null;
-            let minDistance = Infinity;
-            
-            allServersData.forEach(server => {
-                if (!server.lat || !server.lon) return;
-                
-                const distance = Math.hypot(
-                    server.lat - lat,
-                    server.lon - lng
-                );
-                
-                if (distance < minDistance) {
-                    minDistance = distance;
-                    closest = server;
-                }
-            });
-            
-            if (closest) {
-                map.flyTo([closest.lat, closest.lon], 8);
-                L.popup()
-                    .setLatLng([closest.lat, closest.lon])
-                    .setContent(`Ближайший сервер: ${closest.name}<br>Расстояние: ~${Math.round(minDistance * 100)} км`)
-                    .openOn(map);
-            }
-        }
-
-        // 3. Проверка изменений серверов
-        function checkServerChanges(newData) {
-            const oldData = JSON.parse(localStorage.getItem("prev-servers") || "[]");
-            if (!oldData.length) {
-                localStorage.setItem("prev-servers", JSON.stringify(newData));
-                return;
-            }
-            
-            const added = newData.filter(s => !oldData.some(o => o.domain === s.domain));
-            const removed = oldData.filter(o => !newData.some(s => s.domain === o.domain));
-            
-            if (added.length || removed.length) {
-                Swal.fire({
-                    title: "Обновление серверов",
-                    html: `Добавлено: ${added.length} серверов<br>Удалено: ${removed.length} серверов`,
-                    icon: "info",
-                    confirmButtonText: 'OK'
-                });
-            }
-            
-            localStorage.setItem("prev-servers", JSON.stringify(newData));
-        }
-
-        // 4. График нагрузки
-        function setupChartButton() {
-            $('#show-chart-btn').click(async function() {
-                $('#chart-container').toggle();
-                
-                if ($('#chart-container').is(':visible') && !window.chartInitialized) {
-                    try {
-                        // Динамически загружаем Chart.js только когда нужен
-                        const ChartJS = await import('https://cdn.jsdelivr.net/npm/chart.js');
-                        Chart = ChartJS.default;
-                        renderLoadChart();
-                        window.chartInitialized = true;
-                    } catch (error) {
-                        console.error("Ошибка загрузки Chart.js:", error);
-                        showError("Не удалось загрузить график");
-                    }
-                }
-            });
-        }
-
-        function renderLoadChart() {
-            if (!Chart || !allServersData.length) return;
-            
-            const ctx = document.getElementById('load-chart').getContext('2d');
-            const countries = [...new Set(allServersData.map(s => s.country))];
-            const avgLoad = countries.map(country => {
-                const servers = allServersData.filter(s => s.country === country);
-                return servers.reduce((sum, s) => sum + s.load, 0) / servers.length;
-            });
-
-            new Chart(ctx, {
-                type: 'bar',
-                data: {
-                    labels: countries,
-                    datasets: [{
-                        label: 'Средняя нагрузка (%)',
-                        data: avgLoad,
-                        backgroundColor: 'rgba(75, 192, 192, 0.6)'
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    scales: {
-                        y: {
-                            beginAtZero: true,
-                            max: 100
-                        }
-                    }
-                }
-            });
-        }
-
-        // ======================
-        // Вспомогательные функции
-        // ======================
-
-        async function fetchWithRetry(url, retries = 3, delay = 1000) {
-            try {
-                const response = await fetch(url, {
-                    method: "GET",
-                    headers: { "Referrer-Policy": "no-referrer" },
-                    mode: 'cors',
-                    credentials: 'same-origin'
-                });
-                
-                if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-                return response;
-            } catch (error) {
-                if (retries > 0) {
-                    await new Promise(resolve => setTimeout(resolve, delay));
-                    return fetchWithRetry(url, retries - 1, delay * 2);
-                }
-                throw error;
-            }
-        }
-        
-        function showError(message) {
-            Swal.fire({
-                icon: 'error',
-                title: 'Ошибка',
-                text: message,
-                confirmButtonText: 'OK'
-            });
-        }
-    </script>
-</body>
-</html>
+        function findAndHighlight
