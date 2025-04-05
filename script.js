@@ -161,18 +161,37 @@ $(document).ready(async function() {
             });
             
             // Guess Exit IPv6 Addresses for table view
-            const hasIpv6 = tableData.filter(l => l[4] !== "" && l[4] !== MSG_UNKNOWN_IPV6);
-            hasIpv6.sort((a, b) => Number(a[1].split("#")[1]) - Number(b[1].split("#")[1]));
+            const hasIpv6 = tableData.filter(l => l[4] && l[4] !== "" && l[4] !== MSG_UNKNOWN_IPV6);
+            hasIpv6.sort((a, b) => {
+                const aNum = Number(a[1].split("#")[1]);
+                const bNum = Number(b[1].split("#")[1]);
+                return aNum - bNum;
+            });
             
-            Object.entries(Object.groupBy(hasIpv6, d => d[0])).forEach(([_, node]) => {
-                const prefix = node[0][4].split("::")[0];
-                let suffixInt = parseInt(node[0][4].split("::")[1], 16);
+            // Group by node
+            const groupedByNode = {};
+            hasIpv6.forEach(server => {
+                const node = server[0];
+                if (!groupedByNode[node]) {
+                    groupedByNode[node] = [];
+                }
+                groupedByNode[node].push(server);
+            });
+            
+            // Process each node group
+            Object.values(groupedByNode).forEach(nodeGroup => {
+                if (nodeGroup.length === 0) return;
+                
+                const firstServer = nodeGroup[0];
+                const ipv6Parts = firstServer[4].split("::");
+                const prefix = ipv6Parts[0];
+                let suffixInt = parseInt(ipv6Parts[1], 16);
                 
                 // Special cases handling
                 if (suffixInt === 17) suffixInt = 16; // Fix for co-01
                 if (suffixInt === 13) suffixInt = 32; // Fix for some servers on node-ch-15
                 
-                node.forEach(server => {
+                nodeGroup.forEach(server => {
                     suffixInt++;
                     server[5] = `${prefix}::${suffixInt.toString(16)}`;
                 });
