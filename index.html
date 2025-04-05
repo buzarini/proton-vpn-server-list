@@ -138,11 +138,11 @@
     <script src="https://unpkg.com/leaflet.markercluster/dist/leaflet.markercluster.js" crossorigin=""></script>
     <script src="https://cdn.jsdelivr.net/npm/jquery-csv@1.0.40/src/jquery.csv.min.js"></script>
 
-    <script>
+     <script>
         // Инициализация DataTables как глобальной переменной
         $.fn.DataTable = $.fn.dataTable;
         
-        // Локализация DataTables на русский (встроенная вместо загрузки извне)
+        // Локализация DataTables на русский
         const russianLanguage = {
             "decimal":        "",
             "emptyTable":     "Нет данных в таблице",
@@ -217,8 +217,8 @@
                         logical.Name,
                         logical.Servers[0].EntryIP,
                         logical.Servers[0].ExitIP,
-                        nodesIpv6[logical.Domain] || (!!(16 & logical.Features) ? MSG_UNKNOWN_IPV6 : "",
-                        "",
+                        nodesIpv6[logical.Domain] || (!!(16 & logical.Features) ? MSG_UNKNOWN_IPV6 : ""),
+                        "", // Выходной IPv6 будет заполнен позже
                         isp ? isp.org : ""
                     ]);
                 });
@@ -228,8 +228,9 @@
                 hasIpv6.sort((a, b) => Number(a[1].split("#")[1]) - Number(b[1].split("#")[1]));
 
                 Object.entries(Object.groupBy(hasIpv6, d => d[0])).forEach(([_, node]) => {
-                    const [prefix, suffix] = node[0][4].split("::");
-                    let suffixInt = parseInt(suffix, 16);
+                    const parts = node[0][4].split("::");
+                    const prefix = parts[0];
+                    let suffixInt = parseInt(parts[1], 16);
 
                     // Исправления для специфических случаев
                     if (suffixInt === 17) suffixInt = 16;
@@ -245,7 +246,7 @@
                 $('#server-table').DataTable({
                     data: data,
                     pageLength: 25,
-                    language: russianLanguage, // Используем встроенную локализацию
+                    language: russianLanguage,
                     search: {
                         search: '::'
                     }
@@ -296,7 +297,7 @@
                 const urls = [
                     "https://protonvpnmapproxy.privacyjam.com",
                     "https://protonvpnmap.privacyjam.com/backup_logicals.json",
-                    "logicals.json?2025-01-21" // Локальный fallback
+                    "logicals.json?2025-01-21"
                 ];
     
                 for (let url of urls) {
