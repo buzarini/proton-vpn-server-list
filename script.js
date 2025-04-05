@@ -74,6 +74,26 @@ $(document).ready(async function() {
         });
     }
     
+    // Parse CSV data
+    function parseCSV(csvText) {
+        const lines = csvText.split('\n');
+        const headers = lines[0].split(',');
+        const result = [];
+        
+        for (let i = 1; i < lines.length; i++) {
+            if (!lines[i]) continue;
+            const obj = {};
+            const currentline = lines[i].split(',');
+            
+            for (let j = 0; j < headers.length; j++) {
+                obj[headers[j].trim()] = currentline[j] ? currentline[j].trim() : '';
+            }
+            result.push(obj);
+        }
+        
+        return result;
+    }
+    
     // Fetch data from multiple sources with fallback
     async function fetchData() {
         for (let url of API_URLS) {
@@ -98,11 +118,12 @@ $(document).ready(async function() {
             loadingElement.text("Loading VPN server data...");
             
             // Fetch all required data
-            const [logicalsData, ipv6Data, ipInfoData] = await Promise.all([
-                fetchData(),
-                fetch("nodes-ipv6.json").then(res => res.json()),
-                fetch("ipinfo.csv").then(res => res.text()).then(text => $.csv.toObjects(text))
-            ]);
+            const logicalsData = await fetchData();
+            const ipv6Data = await fetch("nodes-ipv6.json").then(res => res.json());
+            const ipInfoText = await fetch("ipinfo.csv").then(res => res.text());
+            
+            // Parse CSV data manually since $.csv.toObjects() is not working
+            const ipInfoData = parseCSV(ipInfoText);
             
             if (!logicalsData.LogicalServers) throw new Error("Invalid server data");
             
@@ -122,7 +143,7 @@ $(document).ready(async function() {
                         logical.Name,
                         server.EntryIP,
                         server.ExitIP,
-                        ipv6Data[logical.Domain] || (!!(16 & logical.Features) ? MSG_UNKNOWN_IPV6 : ""),
+                        ipv6Data[logical.Domain] || (!!(16 & logical.Features) ? MSG_UNKNOWN_IPV6 : "",
                         "", // Exit IPv6 (will be filled later)
                         isp ? isp.org : "",
                         location
@@ -225,7 +246,7 @@ $(document).ready(async function() {
             map.addLayer(markerCluster);
             
         } catch (error) {
-            loadingElement.text("Failed to load VPN server data.");
+            loadingElement.text("Failed to load VPN server data. See console for details.");
             console.error("Error processing server data:", error);
         }
     }
