@@ -9,13 +9,13 @@
   <!-- Security Headers -->
   <meta http-equiv="Content-Security-Policy" content="
     default-src 'self';
-    script-src 'self' https://cdn.jsdelivr.net https://unpkg.com https://api.cors.lol;
-    style-src 'self' https://cdn.jsdelivr.net https://unpkg.com 'unsafe-inline';
+    script-src 'self' https://cdn.jsdelivr.net https://unpkg.com https://api.cors.lol https://cdn.datatables.net;
+    style-src 'self' https://cdn.jsdelivr.net https://unpkg.com https://cdn.datatables.net 'unsafe-inline';
     img-src 'self' data: https://tile.openstreetmap.org;
     connect-src 'self' https://api.cors.lol https://api.protonmail.ch https://protonvpnmapproxy.privacyjam.com;
     object-src 'none';">
   <meta http-equiv="X-Content-Type-Options" content="nosniff">
-  <meta http-equiv="X-Frame-Options" content="DENY">
+  <!-- Removed X-Frame-Options meta tag as it should be set in HTTP headers -->
 
   <title>ProtonVPN Server Information</title>
   
