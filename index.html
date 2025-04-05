@@ -6,25 +6,24 @@
     <meta name="description" content="Карта и список серверов ProtonVPN с поддержкой IPv6">
     <meta http-equiv="Content-Security-Policy" content="
         default-src 'self' https://github.com; 
-        script-src 'self' https://cdn.jsdelivr.net https://unpkg.com https://api.cors.lol 'unsafe-inline'; 
-        style-src 'self' https://cdn.jsdelivr.net https://unpkg.com 'unsafe-inline'; 
+        script-src 'self' https://cdn.jsdelivr.net https://unpkg.com https://api.cors.lol 'unsafe-inline' https://cdn.datatables.net; 
+        style-src 'self' https://cdn.jsdelivr.net https://unpkg.com 'unsafe-inline' https://cdn.datatables.net; 
         img-src 'self' data: https://tile.openstreetmap.org https://unpkg.com; 
         connect-src 'self' https://api.cors.lol https://api.protonmail.ch https://protonvpnmapproxy.privacyjam.com https://raw.githubusercontent.com; 
         object-src 'none';">
     <meta http-equiv="Strict-Transport-Security" content="max-age=31536000; includeSubDomains; preload">
     <meta http-equiv="X-Content-Type-Options" content="nosniff">
-    <meta http-equiv="X-Frame-Options" content="DENY">
 
     <title>ProtonVPN - Карта и список серверов</title>
     
     <!-- Bootstrap и DataTables -->
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" integrity="sha256-PI8n5gCcz9cQqQXm3PEtDuPG8qx9oFsFctPg0S5zb8g=" crossorigin="anonymous">
-    <link rel="stylesheet" href="https://cdn.datatables.net/2.2.0/css/dataTables.bootstrap5.min.css" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://cdn.datatables.net/2.2.0/css/dataTables.bootstrap5.min.css"/>
     
     <!-- Leaflet для карты -->
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="anonymous">
-    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster/dist/MarkerCluster.css" crossorigin="anonymous">
-    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster/dist/MarkerCluster.Default.css" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster/dist/MarkerCluster.css" crossorigin="">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster/dist/MarkerCluster.Default.css" crossorigin="">
 
     <style>
         #map { 
@@ -131,15 +130,18 @@
     <div class="last-update">Последнее обновление: 2025-02-26</div>
 
     <!-- Скрипты -->
-    <script src="https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js" integrity="sha256-/JqT3SQfawRcv/BIHPThkBvs0OEvtFFmqPF/lYI/Cxo=" crossorigin="anonymous"></script>
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js" integrity="sha256-Yj6UXjMVmpL3QJEEG1XZ1KQZTLt5U+ILREiW/NSF5+E=" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://cdn.datatables.net/2.1.8/js/dataTables.js"></script>
     <script src="https://cdn.datatables.net/2.2.0/js/dataTables.bootstrap5.min.js"></script>
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin="anonymous"></script>
-    <script src="https://unpkg.com/leaflet.markercluster/dist/leaflet.markercluster.js" crossorigin="anonymous"></script>
-    <script src="https://cdn.jsdelivr.net/npm/jquery-csv@1.0.40/src/jquery.csv.min.js" integrity="sha256-zGo0JbZ5Sn6wU76MyVL0TrUZUq5GLXaFnMQCe/hSwVI=" crossorigin="anonymous"></script>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+    <script src="https://unpkg.com/leaflet.markercluster/dist/leaflet.markercluster.js" crossorigin=""></script>
+    <script src="https://cdn.jsdelivr.net/npm/jquery-csv@1.0.40/src/jquery.csv.min.js"></script>
 
     <script>
+        // Инициализация DataTables как глобальной переменной
+        $.fn.DataTable = $.fn.dataTable;
+        
         $(document).ready(async function() {
             // Инициализация вкладок
             const tabEl = document.querySelector('button[data-bs-toggle="tab"]');
@@ -268,16 +270,17 @@
     
             async function fetchData() {
                 const urls = [
-                    "https://api.cors.lol/?url=https://api.protonmail.ch/vpn/logicals",
                     "https://protonvpnmapproxy.privacyjam.com",
-                    "https://protonvpnmap.privacyjam.com/backup_logicals.json"
+                    "https://protonvpnmap.privacyjam.com/backup_logicals.json",
+                    "logicals.json?2025-01-21" // Локальный fallback
                 ];
     
                 for (let url of urls) {
                     try {
                         const response = await fetch(url, {
                             method: "GET",
-                            headers: { "Referrer-Policy": "no-referrer" }
+                            headers: { "Referrer-Policy": "no-referrer" },
+                            mode: 'cors'
                         });
                         if (response.ok) {
                             return await response.json();
