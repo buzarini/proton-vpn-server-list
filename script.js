@@ -122,7 +122,7 @@ $(document).ready(async function() {
                         logical.Name,
                         server.EntryIP,
                         server.ExitIP,
-                        ipv6Data[logical.Domain] || (!!(16 & logical.Features) ? MSG_UNKNOWN_IPV6 : "",
+                        ipv6Data[logical.Domain] || (!!(16 & logical.Features) ? MSG_UNKNOWN_IPV6 : ""),
                         "", // Exit IPv6 (will be filled later)
                         isp ? isp.org : "",
                         location
@@ -144,16 +144,16 @@ $(document).ready(async function() {
             hasIpv6.sort((a, b) => Number(a[1].split("#")[1]) - Number(b[1].split("#")[1]));
             
             Object.entries(Object.groupBy(hasIpv6, d => d[0])).forEach(([_, node]) => {
-                var prefix = node[0][4].split("::")[0];
-                var suffixInt = parseInt(node[0][4].split("::")[1], 16);
+                const prefix = node[0][4].split("::")[0];
+                let suffixInt = parseInt(node[0][4].split("::")[1], 16);
                 
                 // Special cases handling
-                if (suffixInt == 17) suffixInt = 16; // Fix for co-01
-                if (suffixInt == 13) suffixInt = 32; // Fix for some servers on node-ch-15
+                if (suffixInt === 17) suffixInt = 16; // Fix for co-01
+                if (suffixInt === 13) suffixInt = 32; // Fix for some servers on node-ch-15
                 
                 node.forEach(server => {
                     suffixInt++;
-                    server[5] = prefix + "::" + suffixInt.toString(16);
+                    server[5] = `${prefix}::${suffixInt.toString(16)}`;
                 });
             });
             
