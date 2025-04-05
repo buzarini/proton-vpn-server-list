@@ -1,154 +1,350 @@
 <!DOCTYPE html>
-<html lang="en" data-bs-theme="dark">
+<html lang="ru" data-bs-theme="dark">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="referrer" content="no-referrer">
-  <meta name="description" content="ProtonVPN Server Information - Map and List Views">
-  
-  <!-- Security Headers -->
-  <meta http-equiv="Content-Security-Policy" content="
-    default-src 'self';
-    script-src 'self' https://cdn.jsdelivr.net https://unpkg.com https://api.cors.lol https://cdn.datatables.net;
-    style-src 'self' https://cdn.jsdelivr.net https://unpkg.com https://cdn.datatables.net 'unsafe-inline';
-    img-src 'self' data: https://tile.openstreetmap.org;
-    connect-src 'self' https://api.cors.lol https://api.protonmail.ch https://protonvpnmapproxy.privacyjam.com;
-    object-src 'none';">
-  <meta http-equiv="X-Content-Type-Options" content="nosniff">
-  <!-- Removed X-Frame-Options meta tag as it should be set in HTTP headers -->
+    <meta charset="UTF-8">
+    <meta name="referrer" content="no-referrer">
+    <meta name="description" content="Карта и список серверов ProtonVPN с поддержкой IPv6">
+    <meta http-equiv="Content-Security-Policy" content="
+        default-src 'self' https://github.com; 
+        script-src 'self' https://cdn.jsdelivr.net https://unpkg.com https://api.cors.lol 'unsafe-inline'; 
+        style-src 'self' https://cdn.jsdelivr.net https://unpkg.com 'unsafe-inline'; 
+        img-src 'self' data: https://tile.openstreetmap.org https://unpkg.com; 
+        connect-src 'self' https://api.cors.lol https://api.protonmail.ch https://protonvpnmapproxy.privacyjam.com https://raw.githubusercontent.com; 
+        object-src 'none';">
+    <meta http-equiv="Strict-Transport-Security" content="max-age=31536000; includeSubDomains; preload">
+    <meta http-equiv="X-Content-Type-Options" content="nosniff">
+    <meta http-equiv="X-Frame-Options" content="DENY">
 
-  <title>ProtonVPN Server Information</title>
-  
-  <!-- Bootstrap -->
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
-  
-  <!-- Leaflet (for map) -->
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
-  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster/dist/MarkerCluster.css">
-  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster/dist/MarkerCluster.Default.css">
-  
-  <!-- DataTables -->
-  <link rel="stylesheet" href="https://cdn.datatables.net/2.2.0/css/dataTables.bootstrap5.min.css">
-  
-  <style>
-    #map { 
-      height: 100vh; 
-      width: 100%; 
-      display: none;
-    }
+    <title>ProtonVPN - Карта и список серверов</title>
     
-    #serverTable {
-      display: none;
-    }
+    <!-- Bootstrap и DataTables -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" integrity="sha256-PI8n5gCcz9cQqQXm3PEtDuPG8qx9oFsFctPg0S5zb8g=" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://cdn.datatables.net/2.2.0/css/dataTables.bootstrap5.min.css" />
     
-    .view-container {
-      padding: 12px;
-    }
-    
-    .popup-content {
-      max-height: 200px;
-      overflow-y: auto;
-      width: 320px;
-      white-space: nowrap;
-    }
-    
-    #loading {
-      position: absolute;
-      top: 10px;
-      left: 50%;
-      transform: translateX(-50%);
-      background: rgba(0, 0, 0, 0.7);
-      color: white;
-      padding: 8px 12px;
-      border-radius: 5px;
-      font-size: 14px;
-      z-index: 1000;
-    }
-    
-    .toolbar {
-      position: fixed;
-      top: 10px;
-      right: 10px;
-      z-index: 1000;
-    }
-    
-    .github-link {
-      position: fixed;
-      bottom: 20px;
-      left: 20px;
-      font-size: 14px;
-      background: rgba(0, 0, 0, 0.8);
-      padding: 8px 12px;
-      border-radius: 8px;
-      z-index: 1100;
-    }
-    
-    .github-link a {
-      color: white;
-      text-decoration: none;
-      font-weight: bold;
-    }
-    
-    .last-update {
-      position: fixed;
-      top: 0;
-      left: 0;
-      padding: 5px;
-      background: rgba(0, 0, 0, 0.5);
-      color: white;
-      z-index: 1000;
-    }
-  </style>
+    <!-- Leaflet для карты -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster/dist/MarkerCluster.css" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster/dist/MarkerCluster.Default.css" crossorigin="anonymous">
+
+    <style>
+        #map { 
+            height: 60vh; 
+            width: 100%; 
+            margin-bottom: 20px;
+            border-radius: 8px;
+        }
+        .popup-content {
+            max-height: 200px;
+            overflow-y: auto;
+            width: 320px;
+            white-space: nowrap;
+        }
+        #loading {
+            position: absolute;
+            top: 10px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 0, 0, 0.7);
+            color: white;
+            padding: 8px 12px;
+            border-radius: 5px;
+            font-size: 14px;
+            z-index: 1000;
+        }
+        .github-link {
+            position: fixed;
+            bottom: 40px;
+            left: 20px;
+            font-size: 14px;
+            background: rgba(0, 0, 0, 0.8);
+            padding: 8px 12px;
+            border-radius: 8px;
+            z-index: 1100;
+        }
+        .github-link a {
+            color: white;
+            text-decoration: none;
+            font-weight: bold;
+        }
+        .nav-tabs {
+            margin-bottom: 20px;
+        }
+        .tab-content {
+            padding: 15px;
+            border-left: 1px solid #444;
+            border-right: 1px solid #444;
+            border-bottom: 1px solid #444;
+            border-radius: 0 0 8px 8px;
+        }
+        .last-update {
+            position: fixed;
+            top: 0;
+            left: 0;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 5px 10px;
+            border-radius: 0 0 5px 0;
+            z-index: 1000;
+        }
+    </style>
 </head>
 <body>
-  <div class="last-update">Last update: <span id="updateDate"></span></div>
-  
-  <div class="toolbar">
-    <div class="btn-group" role="group">
-      <button id="showMapBtn" class="btn btn-primary">Map View</button>
-      <button id="showTableBtn" class="btn btn-secondary">Server List</button>
+    <div class="container-fluid mt-3">
+        <h1 class="text-center">ProtonVPN - Серверы и карта</h1>
+        
+        <ul class="nav nav-tabs" id="myTab" role="tablist">
+            <li class="nav-item" role="presentation">
+                <button class="nav-link active" id="map-tab" data-bs-toggle="tab" data-bs-target="#map-tab-pane" type="button" role="tab">Карта серверов</button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="list-tab" data-bs-toggle="tab" data-bs-target="#list-tab-pane" type="button" role="tab">Список серверов</button>
+            </li>
+        </ul>
+        
+        <div class="tab-content" id="myTabContent">
+            <div class="tab-pane fade show active" id="map-tab-pane" role="tabpanel" tabindex="0">
+                <div id="map"></div>
+                <div id="loading">Загрузка данных о серверах...</div>
+            </div>
+            
+            <div class="tab-pane fade" id="list-tab-pane" role="tabpanel" tabindex="0">
+                <table id="server-table" class="table table-striped table-hover table-responsive table-sm">
+                    <thead>
+                        <tr>
+                            <th>Узел</th>
+                            <th>Сервер</th>
+                            <th>Входной IPv4</th>
+                            <th>Выходной IPv4</th>
+                            <th>Входной IPv6</th>
+                            <th>Выходной IPv6 (предполагаемый)</th>
+                            <th>Провайдер</th>
+                        </tr>
+                    </thead>
+                </table>
+            </div>
+        </div>
     </div>
-  </div>
-  
-  <div id="loading">Loading VPN server data...</div>
-  
-  <div id="map"></div>
-  
-  <div class="view-container">
-    <table id="serverTable" class="table table-striped table-hover table-responsive table-sm">
-      <thead>
-        <tr>
-          <th>Node</th>
-          <th>Server</th>
-          <th>Entry IPv4</th>
-          <th>Exit IPv4</th>
-          <th>Entry IPv6</th>
-          <th>Exit IPv6 (Guessed)</th>
-          <th>ISP</th>
-          <th>Location</th>
-        </tr>
-      </thead>
-      <tbody></tbody>
-    </table>
-  </div>
-  
-  <div class="github-link">
-    <a href="https://github.com/privacyjam/Proton-Vpn-Server-Map" target="_blank">🌍 View on GitHub</a>
-  </div>
+    
+    <div class="github-link">
+        <a href="https://github.com/privacyjam/Proton-Vpn-Server-Map" target="_blank">🌍 Просмотреть на GitHub</a>
+    </div>
+    
+    <div class="last-update">Последнее обновление: 2025-02-26</div>
 
-  <!-- JavaScript Libraries -->
-  <script src="https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
-  
-  <!-- Leaflet -->
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <script src="https://unpkg.com/leaflet.markercluster/dist/leaflet.markercluster.js"></script>
-  
-  <!-- DataTables -->
-  <script src="https://cdn.datatables.net/2.2.0/js/dataTables.js"></script>
-  <script src="https://cdn.datatables.net/2.2.0/js/dataTables.bootstrap5.min.js"></script>
-  
-  <!-- Custom Script -->
-  <script src="script.js"></script>
+    <!-- Скрипты -->
+    <script src="https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js" integrity="sha256-/JqT3SQfawRcv/BIHPThkBvs0OEvtFFmqPF/lYI/Cxo=" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js" integrity="sha256-Yj6UXjMVmpL3QJEEG1XZ1KQZTLt5U+ILREiW/NSF5+E=" crossorigin="anonymous"></script>
+    <script src="https://cdn.datatables.net/2.1.8/js/dataTables.js"></script>
+    <script src="https://cdn.datatables.net/2.2.0/js/dataTables.bootstrap5.min.js"></script>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin="anonymous"></script>
+    <script src="https://unpkg.com/leaflet.markercluster/dist/leaflet.markercluster.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/jquery-csv@1.0.40/src/jquery.csv.min.js" integrity="sha256-zGo0JbZ5Sn6wU76MyVL0TrUZUq5GLXaFnMQCe/hSwVI=" crossorigin="anonymous"></script>
+
+    <script>
+        $(document).ready(async function() {
+            // Инициализация вкладок
+            const tabEl = document.querySelector('button[data-bs-toggle="tab"]');
+            if (tabEl) {
+                tabEl.addEventListener('shown.bs.tab', function (event) {
+                    if (event.target.id === 'map-tab' && !window.mapInitialized) {
+                        initMap();
+                        window.mapInitialized = true;
+                    }
+                });
+            }
+
+            // Загружаем данные для таблицы
+            await loadServerTableData();
+            
+            // Инициализируем карту, если активна вкладка с картой
+            if ($('#map-tab').hasClass('active')) {
+                initMap();
+                window.mapInitialized = true;
+            }
+        });
+
+        async function loadServerTableData() {
+            const MSG_UNKNOWN_IPV6 = ":: (Есть, но неизвестен)";
+            
+            try {
+                const [logicalsRes, nodesIpv6Res, ipinfoRes] = await Promise.all([
+                    fetch("logicals.json?2025-01-21"),
+                    fetch("nodes-ipv6.json?2025-01-21"),
+                    fetch("ipinfo.csv?2025-01-21")
+                ]);
+                
+                const [logicalsJson, nodesIpv6, ipinfoText] = await Promise.all([
+                    logicalsRes.json(),
+                    nodesIpv6Res.json(),
+                    ipinfoRes.text()
+                ]);
+                
+                const logicals = logicalsJson.LogicalServers;
+                const ipinfo = $.csv.toObjects(ipinfoText);
+                const data = [];
+
+                logicals.filter(l => l.Servers.length === 1).forEach(logical => {
+                    const isp = ipinfo.find(i => i.ip === logical.Servers[0].ExitIP);
+                    data.push([
+                        logical.Domain,
+                        logical.Name,
+                        logical.Servers[0].EntryIP,
+                        logical.Servers[0].ExitIP,
+                        nodesIpv6[logical.Domain] || (!!(16 & logical.Features) ? MSG_UNKNOWN_IPV6 : ""),
+                        "",
+                        isp ? isp.org : ""
+                    ]);
+                });
+
+                // Предполагаем выходные IPv6 адреса
+                const hasIpv6 = data.filter(l => l[4] !== "" && l[4] !== MSG_UNKNOWN_IPV6);
+                hasIpv6.sort((a, b) => Number(a[1].split("#")[1]) - Number(b[1].split("#")[1]));
+
+                Object.entries(Object.groupBy(hasIpv6, d => d[0])).forEach(([_, node]) => {
+                    const [prefix, suffix] = node[0][4].split("::");
+                    let suffixInt = parseInt(suffix, 16);
+
+                    // Исправления для специфических случаев
+                    if (suffixInt === 17) suffixInt = 16;
+                    if (suffixInt === 13) suffixInt = 32;
+                    
+                    node.forEach(server => {
+                        suffixInt++;
+                        server[5] = `${prefix}::${suffixInt.toString(16)}`;
+                    });
+                });
+
+                // Инициализация таблицы
+                $('#server-table').DataTable({
+                    data: data,
+                    pageLength: 25,
+                    language: {
+                        url: "https://cdn.datatables.net/plug-ins/1.13.1/i18n/ru.json"
+                    },
+                    search: {
+                        search: '::'
+                    }
+                });
+            } catch (error) {
+                console.error("Ошибка загрузки данных для таблицы:", error);
+            }
+        }
+
+        function initMap() {
+            const map = L.map('map', { 
+                center: [20, 0], 
+                zoom: 2, 
+                zoomSnap: 0.5
+            });
+    
+            L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                maxZoom: 19,
+                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+            }).addTo(map);
+    
+            const markerCluster = L.markerClusterGroup({
+                maxClusterRadius: 20,
+                disableClusteringAtZoom: 8,
+                iconCreateFunction: (cluster) => {
+                    const childCount = cluster.getChildCount();
+                    let clusterClass = 'marker-cluster-small';
+                    if (childCount > 10) clusterClass = 'marker-cluster-medium';
+                    if (childCount > 50) clusterClass = 'marker-cluster-large';
+                    return new L.DivIcon({
+                        html: `<div><span>${childCount}</span></div>`,
+                        className: `marker-cluster ${clusterClass}`,
+                        iconSize: [30, 30],
+                    });
+                },
+            });            
+    
+            const defaultIcon = L.icon({
+                iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
+                shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
+                iconSize: [25, 41],
+                iconAnchor: [12, 41],
+                popupAnchor: [1, -34],
+                shadowSize: [41, 41]
+            });
+    
+            async function fetchData() {
+                const urls = [
+                    "https://api.cors.lol/?url=https://api.protonmail.ch/vpn/logicals",
+                    "https://protonvpnmapproxy.privacyjam.com",
+                    "https://protonvpnmap.privacyjam.com/backup_logicals.json"
+                ];
+    
+                for (let url of urls) {
+                    try {
+                        const response = await fetch(url, {
+                            method: "GET",
+                            headers: { "Referrer-Policy": "no-referrer" }
+                        });
+                        if (response.ok) {
+                            return await response.json();
+                        }
+                    } catch (error) {
+                        console.warn(`Не удалось загрузить данные из ${url}:`, error);
+                    }
+                }
+                throw new Error("Все источники данных недоступны.");
+            }
+    
+            fetchData().then(data => {
+                document.getElementById("loading").style.display = "none";
+    
+                if (!data.LogicalServers) throw new Error("Неверные данные");
+    
+                const locationGroups = {};
+    
+                data.LogicalServers.forEach(server => {
+                    if (server.Location && server.Location.Lat && server.Location.Long) {
+                        const key = `${server.Location.Lat.toFixed(2)},${server.Location.Long.toFixed(2)}`;
+                        if (!locationGroups[key]) {
+                            locationGroups[key] = [];
+                        }
+                        locationGroups[key].push(server);
+                    }
+                });
+    
+                Object.entries(locationGroups).forEach(([key, servers]) => {
+                    const [lat, lon] = key.split(',').map(Number);
+                    const locationName = servers[0].City ? servers[0].City : servers[0].EntryCountry;
+    
+                    let popupContent = `<b>${locationName}</b><br>`;
+                    popupContent += `<b>${servers.length} серверов</b><br><div class="popup-content">`;
+    
+                    servers.forEach(server => {
+                        let smartRouting = server.HostCountry && server.HostCountry !== server.EntryCountry 
+                            ? `<span style="color:red; font-weight:bold;">(Smart Routing из ${server.HostCountry})</span>` 
+                            : '';
+    
+                        let torServer = server.Name.includes("TOR") 
+                            ? `<span style="color:purple; font-weight:bold;">(TOR сервер)</span>` 
+                            : '';
+                        
+                        let secureCore = (server.Features === 1 && server.EntryCountry !== server.ExitCountry) 
+                            ? `<span style="color:orange; font-weight:bold;">(Secure Core из ${server.EntryCountry})</span>` 
+                            : (server.Features === 1) 
+                                ? `<span style="color:orange; font-weight:bold;">(Secure Core сервер)</span>` 
+                                : '';
+                        
+                        popupContent += `🔹 <b>${server.Name}</b> - Нагрузка: ${server.Load}% ${smartRouting} ${torServer} ${secureCore}<br>`;
+                    });
+    
+                    popupContent += `</div>`;
+    
+                    const marker = L.marker([lat, lon], { icon: defaultIcon })
+                        .bindPopup(popupContent, { maxWidth: 350 });
+    
+                    markerCluster.addLayer(marker);
+                });
+    
+                map.addLayer(markerCluster);
+            }).catch(error => {
+                document.getElementById("loading").textContent = "Не удалось загрузить данные о серверах VPN.";
+                console.error("Ошибка загрузки данных VPN:", error);
+            });
+        }
+    </script>
 </body>
 </html>
